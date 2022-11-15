@@ -1,0 +1,222 @@
+sbit LCD_RS at RB1_bit;
+sbit LCD_EN at RB2_bit;
+sbit LCD_D4 at RB3_bit;
+sbit LCD_D5 at RB4_bit;
+sbit LCD_D6 at RB5_bit;
+sbit LCD_D7 at RB6_bit;
+
+sbit LCD_RS_Direction at TRISB1_bit;
+sbit LCD_EN_Direction at TRISB2_bit;
+sbit LCD_D4_Direction at TRISB3_bit;
+sbit LCD_D5_Direction at TRISB4_bit;
+sbit LCD_D6_Direction at TRISB5_bit;
+sbit LCD_D7_Direction at TRISB6_bit;
+
+int voltage1 = 0;
+int current1 = 0;
+int adc_val = 0;
+char ch1[7];
+char ch4[7];
+char ch3[7];
+unsigned char value[50],pos;
+unsigned char sec;
+
+
+void clearVAL()
+{ char i;
+for(i=0;i<30;i++)
+value[i]=' ';
+}
+
+float findvoltage(int a)
+{
+int i;
+unsigned int temp=0;
+float maxpoint = 0;
+for(i=0;i<500;i++)
+{
+if(temp = ADC_Read(a),temp>maxpoint)
+{
+maxpoint = temp;
+}
+}
+maxpoint = ( maxpoint * 5 )/ (1023) ;
+maxpoint = maxpoint * 4;
+maxpoint = maxpoint + 1.4;
+maxpoint = maxpoint * 18;
+maxpoint = maxpoint * ( 1 / sqrt(2) );
+delay_ms(20);
+return maxpoint;
+}
+float findcurrent(int a)
+{
+int i;
+unsigned int temp=0;
+float maxpoint = 0;
+for(i=0;i<500;i++)
+{
+if(temp = ADC_Read(a),temp>maxpoint)
+{
+maxpoint = temp;
+}
+}
+maxpoint = ( maxpoint * 5 )/ (1024) ;
+maxpoint = maxpoint / 2 ;
+maxpoint = maxpoint * ( 1 / sqrt(2) );
+maxpoint = (maxpoint * 1000) / (66);
+delay_ms(20);
+return maxpoint;
+}
+void display()
+{
+intToStr(voltage1, ch1);
+lcd_out(1,1,"V1:");
+lcd_out(1,4, Ltrim(ch1));
+lcd_out(1,7,"V");
+delay_ms(40);
+intToStr(current1, ch4);
+lcd_out(1,9,"I1:");
+lcd_out(1,12, Ltrim(ch4));
+lcd_out(1,14,"A");
+delay_ms(40);
+intToStr(adc_val, ch3);
+lcd_out(2,1,"T:");
+lcd_out(2,3, Ltrim(ch3));
+lcd_out(2,5,"C");
+delay_ms(40);
+}
+
+void main()
+{
+char i,x,flag;
+ANSELA=0XFF;
+ANSELB=0X00;
+ANSELC=0X00;
+TRISB=0X00;
+ADC_Init();
+Lcd_Init();
+Lcd_Cmd(_LCD_CLEAR);
+Lcd_Cmd(_LCD_CURSOR_OFF);
+ANSELB=0X00;
+ANSELC=0X00;
+TRISB=0x00;
+delay_ms(1000);
+
+OSCCON.IRCF0=0;
+OSCCON.IRCF1=1;
+OSCCON.IRCF2=1;
+INTCON.GIE=1;
+INTCON.RCIE=1;
+INTCON.PEIE=1;
+UART1_Init(9600); // Initialize UART module at 9600 bps
+adc_init();
+lcd_init();
+lcd_out(3,3, "T/F health");
+delay_ms(1000);
+clearVAL(); //AT
+lcd_out(3,2,"AT");
+UART1_WRITE_TEXT("AT\r\n");
+delay_ms(1000);
+
+delay_ms(1000);
+
+
+clearVAL(); //ATE0
+Lcd_Cmd(_LCD_CLEAR);
+lcd_out(3,1,"ATE0");
+UART1_WRITE_TEXT("ATE0\r\n");
+Lcd_Cmd(_LCD_CLEAR);
+
+delay_ms(1000);
+Lcd_Cmd(_LCD_CLEAR);
+
+
+clearVAL(); //AT+CWMODE=3
+lcd_out(3,1,"AT+CWMODE=1");
+UART1_WRITE_TEXT("AT+CWMODE=3\r\n");
+delay_ms(1000);
+
+//delay_ms(2000);
+Lcd_Cmd(_LCD_CLEAR);
+lcd_out(3,1,"AT+CWQAP");
+UART1_WRITE_TEXT("AT+CWQAP\r\n");
+delay_ms(1000);
+
+Lcd_Cmd(_LCD_CLEAR);
+
+clearVAL(); //AT+CIPMUX=1
+lcd_out(3,1,"AT+CIPMUX=1");
+UART1_WRITE_TEXT("AT+CIPMUX=1\r\n") ;
+delay_ms(1000);
+while(1)
+{
+
+delay_ms(1000);
+Lcd_Cmd(_LCD_CLEAR); // Clear display
+clearVAL(); //AT+CIPMUX=0
+lcd_out(3,1,"connecting...");
+value[0]='\0';
+strcat(value,"AT+CWJAP=\"PTCL-BB\",\"F4C0A9AB\"");
+UART1_WRITE_TEXT(&value) ;
+UART1_WRITE(0X0D);
+UART1_WRITE(0X0A);
+delay_ms(1000);
+
+delay_ms(1000);
+sec=0;
+
+while(1)
+{
+voltage1 = findvoltage(0);
+current1 = findcurrent(1);
+adc_val=adc_read(2)*0.488;
+display();
+delay_ms(40);
+delay_ms(2000);
+lcd_out(3,1,"Uploading...");
+clearVAL();
+value[0]='\0';
+strcat(value,"AT+CIPSTART=4,\"TCP\",\"184.106.153.149\",80");
+UART1_WRITE_TEXT(&value) ;
+UART1_WRITE(0X0D);
+UART1_WRITE(0X0A);
+sec=0;
+delay_ms(2000);
+clearVAL();
+value[0]='\0';
+strcat(value,"AT+CIPSEND=4,70");
+UART1_WRITE_TEXT(&value) ;
+UART1_WRITE(0X0D);
+UART1_WRITE(0X0A);
+delay_ms(2000);
+clearVAL();
+value[0]='\0';
+lcd_out(3,1,"GET DATA");
+strcat(value,"GET /update?key=2U36ML8CHJR23IOW&field1="); //UPDATE CHANNEL using API
+UART1_WRITE_TEXT(&value) ;
+UART1_WRITE((voltage1/1000)+48);
+UART1_WRITE(((voltage1%1000)/100)+48);
+UART1_WRITE(((voltage1%100)/10)+48);
+UART1_WRITE((voltage1%10)+48);
+UART1_WRITE_TEXT("&field2=") ;
+UART1_WRITE((current1/1000)+48);
+UART1_WRITE(((current1%1000)/100)+48);
+UART1_WRITE(((current1%100)/10)+48);
+UART1_WRITE((current1%10)+48);
+UART1_WRITE_TEXT("&field3=") ;
+UART1_WRITE((adc_val/1000)+48);
+UART1_WRITE(((adc_val%1000)/100)+48);
+UART1_WRITE(((adc_val%100)/10)+48);
+UART1_WRITE((adc_val%10)+48);
+UART1_WRITE(0x0d);
+UART1_WRITE(0x0a);
+delay_ms(2000);
+delay_ms(1000);
+lcd_out(3,1,"CIPLCOSE");
+clearVAL(); //AT+CIPMUX=0
+value[0]='\0';
+delay_ms(10000);
+
+}
+}
+}
